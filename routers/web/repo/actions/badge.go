@@ -19,13 +19,17 @@ import (
 func GetWorkflowBadge(ctx *context.Context) {
 	workflowFile := ctx.Params("workflow_name")
 	branch := ctx.Req.URL.Query().Get("branch")
-	if branch == "" {
+	tag := ctx.Req.URL.Query().Get("tag")
+	if branch == "" && tag == "" {
 		branch = ctx.Repo.Repository.DefaultBranch
 	}
-	branchRef := fmt.Sprintf("refs/heads/%s", branch)
+	ref := fmt.Sprintf("refs/heads/%s", branch)
+	if branch == "" && tag != "" {
+		ref = fmt.Sprintf("refs/tags/%s", tag)
+	}
 	event := ctx.Req.URL.Query().Get("event")
 
-	badge, err := getWorkflowBadge(ctx, workflowFile, branchRef, event)
+	badge, err := getWorkflowBadge(ctx, workflowFile, ref, event)
 	if err != nil {
 		ctx.ServerError("GetWorkflowBadge", err)
 		return
