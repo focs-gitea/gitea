@@ -5,6 +5,7 @@ package repo
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	actions_model "code.gitea.io/gitea/models/actions"
@@ -516,4 +517,86 @@ type Action struct{}
 // NewAction creates a new Action service
 func NewAction() actions_service.API {
 	return Action{}
+}
+
+func GetBadgeMessage(ctx *context.APIContext) {
+	// GetBadgeMessage get the badge message for a repository
+	// swagger:operation GET /repos/{owner}/{repo}/actions/workflows/{workflowname}/badge repository GetBadgeMessage
+	// ---
+	// summary: Get the badge message for a repository
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo
+	//   type: string
+	//   required: true
+	// - name: workflowname
+	//   in: path
+	//   description: name of workflow file
+	//   type: string
+	//   required: true
+	// - name: tag
+	//   in: query
+	//   description: the tag to filter by
+	//   type: string
+	// - name: event
+	//   in: query
+	//   description: the event to filter by
+	//   type: string
+	// - name: branch
+	//   in: query
+	//   description: the branch to filter by
+	//   type: string
+	// responses:
+	//   "200":
+	//     "$ref": "#/responses/BadgeMessage"
+	//   "400":
+	//     "$ref": "#/responses/error"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+	//   "409":
+	//     "$ref": "#/responses/conflict"
+	//   "422":
+	//     "$ref": "#/responses/validationError"
+	workflowFile := ctx.Params("workflowname")
+	branch := ctx.FormString("branch")
+	tag := ctx.FormString("tag")
+	if branch == "" && tag == "" {
+		branch = ctx.Repo.Repository.DefaultBranch
+	}
+	ref := fmt.Sprintf("refs/heads/%s", branch)
+	if branch == "" && tag != "" {
+		ref = fmt.Sprintf("refs/tags/%s", tag)
+	}
+	event := ctx.FormString("event")
+
+	message, err := getWorkflowMessage(ctx, workflowFile, ref, event)
+	if err != nil {
+		ctx.ServerError("GetWorkflowMessage", err)
+		return
+	}
+
+	res := new(api.BadgeMessage)
+	res.Message = message
+	ctx.JSON(http.StatusOK, &res)
+}
+
+func getWorkflowMessage(ctx *context.APIContext, workflowFile, branchName, event string) (string, error) {
+	run, err := actions_model.GetWorkflowLatestRun(ctx, ctx.Repo.Repository.ID, workflowFile, branchName, event)
+	if err != nil {
+		if errors.Is(err, util.ErrNotExist) {
+			return "no status", nil
+		}
+		return "", err
+	}
+	return run.Status.String(), nil
 }
