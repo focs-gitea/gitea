@@ -309,7 +309,6 @@ func Rerun(ctx *context_module.Context) {
 		for _, j := range jobs {
 			// if the job has needs, it should be set to "blocked" status to wait for other jobs
 			shouldBlock := len(j.Needs) > 0
-			j.Run.TriggerUserID = ctx.Doer.ID
 			if err := rerunJob(ctx, j, shouldBlock); err != nil {
 				ctx.Error(http.StatusInternalServerError, err.Error())
 				return
@@ -324,7 +323,6 @@ func Rerun(ctx *context_module.Context) {
 	for _, j := range rerunJobs {
 		// jobs other than the specified one should be set to "blocked" status
 		shouldBlock := j.JobID != job.JobID
-		j.Run.TriggerUserID = ctx.Doer.ID
 		if err := rerunJob(ctx, j, shouldBlock); err != nil {
 			ctx.Error(http.StatusInternalServerError, err.Error())
 			return
