@@ -345,7 +345,6 @@ func rerunJob(ctx *context_module.Context, job *actions_model.ActionRunJob, shou
 	}
 	job.Started = 0
 	job.Stopped = 0
-	job.Run.TriggerUserID = ctx.Doer.ID
 
 	if err := db.WithTx(ctx, func(ctx context.Context) error {
 		_, err := actions_model.UpdateRunJob(ctx, job, builder.Eq{"status": status}, "task_id", "status", "started", "stopped")
