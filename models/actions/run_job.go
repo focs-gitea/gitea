@@ -144,8 +144,15 @@ func UpdateRunJob(ctx context.Context, job *ActionRunJob, cond builder.Cond, col
 		if run.Stopped.IsZero() && run.Status.IsDone() {
 			run.Stopped = timeutil.TimeStampNow()
 		}
-		if err := UpdateRun(ctx, run, "status", "started", "stopped"); err != nil {
-			return 0, fmt.Errorf("update run %d: %w", run.ID, err)
+		if job.Run.TriggerUserID != 0 {
+			run.TriggerUserID = job.Run.TriggerUserID
+			if err := UpdateRun(ctx, run, "status", "started", "stopped", "trigger_user_id"); err != nil {
+				return 0, fmt.Errorf("update run %d: %w", run.ID, err)
+			}
+		} else {
+			if err := UpdateRun(ctx, run, "status", "started", "stopped"); err != nil {
+				return 0, fmt.Errorf("update run %d: %w", run.ID, err)
+			}
 		}
 	}
 
