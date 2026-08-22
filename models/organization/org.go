@@ -731,7 +731,9 @@ func (org *Organization) AccessibleTeamReposEnv(ctx context.Context, team *Team)
 	}
 }
 
-func (org *Organization) GetCompanyTeam(ctx context.Context, user *user_model.User) (*Team, error) {
+// GetCompanyTeamForUser returns the company team when the user is allowed to
+// pretend in it. It intentionally doesn't load all team members.
+func (org *Organization) GetCompanyTeamForUser(ctx context.Context, user *user_model.User) (*Team, error) {
 	if user == nil {
 		return nil, nil
 	}
@@ -754,10 +756,6 @@ func (org *Organization) GetCompanyTeam(ctx context.Context, user *user_model.Us
 		return nil, errors.New("company team not found")
 	}
 
-	if err := companyTeam.LoadMembers(db.DefaultContext); err != nil {
-		return nil, err
-	}
-
 	if companyTeam.IsMember(ctx, user.ID) {
 		return companyTeam, nil
 	}
@@ -770,6 +768,17 @@ func (org *Organization) GetCompanyTeam(ctx context.Context, user *user_model.Us
 	}
 
 	return nil, errors.New("user not in company team")
+}
+
+func (org *Organization) GetCompanyTeam(ctx context.Context, user *user_model.User) (*Team, error) {
+	companyTeam, err := org.GetCompanyTeamForUser(ctx, user)
+	if err != nil || companyTeam == nil {
+		return companyTeam, err
+	}
+	if err := companyTeam.LoadMembers(ctx); err != nil {
+		return nil, err
+	}
+	return companyTeam, nil
 }
 
 func (env *accessibleReposEnv) cond() builder.Cond {

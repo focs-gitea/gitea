@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"code.gitea.io/gitea/models/auth"
@@ -335,6 +334,8 @@ func handleSignInFull(ctx *context.Context, u *user_model.User, remember, obeyRe
 		"twofaUid",
 		"twofaRemember",
 		"linkAccount",
+		auth_service.PretendOriginalUIDKey,
+		auth_service.PretendOrgIDKey,
 	}, map[string]any{
 		"uid":   u.ID,
 		"uname": u.Name,
@@ -875,48 +876,86 @@ func updateSession(ctx *context.Context, deletes []string, updates map[string]an
 }
 
 func Pretend(ctx *context.Context) {
-	m, _ := url.ParseQuery(ctx.Req.URL.RawQuery)
-	log.Info("org_id: %+v", m["org_id"])
-	org, err := organization.GetOrgByID(ctx, ctx.FormInt64("org_id"))
+	targetID := ctx.ParamsInt64(":userid")
+	orgID := ctx.FormInt64("org_id")
+
+	originalUser, isPretending, err := auth_service.GetPretendOriginalUser(ctx, ctx.Session)
 	if err != nil {
-		ctx.ServerError("GetOrgByID", err)
+		ctx.ServerError("GetPretendOriginalUser", err)
 		return
 	}
 
-	u, err := user_model.GetUserByID(ctx, ctx.ParamsInt64((":userid")))
+	// Posting the original user ID ends the pretend session. This check deliberately
+	// happens before organization authorization: an owner does not need to be a member
+	// of the company team and must still always be able to return to their own identity.
+	if isPretending && targetID == originalUser.ID {
+		if err := updateSession(ctx, []string{
+			auth_service.PretendOriginalUIDKey,
+			auth_service.PretendOrgIDKey,
+		}, map[string]any{
+			"uid":   originalUser.ID,
+			"uname": originalUser.Name,
+		}); err != nil {
+			ctx.ServerError("RestorePretendSession", err)
+			return
+		}
+
+		ctx.Csrf.DeleteCookie(ctx)
+		log.Info("User %s[%d] ended pretend session as %s[%d]", originalUser.Name, originalUser.ID, ctx.Doer.Name, ctx.Doer.ID)
+		ctx.RedirectToCurrentSite(ctx.FormString("redirect_to"), originalUser.HomeLink())
+		return
+	}
+
+	if !isPretending {
+		originalUser = ctx.Doer
+	}
+	if originalUser == nil || !originalUser.IsActive || originalUser.ProhibitLogin {
+		ctx.NotFound("Pretend", nil)
+		return
+	}
+
+	org, err := organization.GetOrgByID(ctx, orgID)
 	if err != nil {
-		ctx.ServerError("GetUserByID", err)
+		ctx.NotFound("GetOrgByID", err)
 		return
 	}
 
-	companyTeam, err := org.GetCompanyTeam(ctx, u)
+	// Always authorize the real user, never the identity currently being impersonated.
+	companyTeam, err := org.GetCompanyTeamForUser(ctx, originalUser)
+	if err != nil || companyTeam == nil {
+		ctx.NotFound("GetCompanyTeam", err)
+		return
+	}
+
+	target, err := user_model.GetUserByID(ctx, targetID)
 	if err != nil {
-		ctx.ServerError("GetCompanyTeam", err)
+		ctx.NotFound("GetUserByID", err)
+		return
+	}
+	if target.IsAdmin || target.IsOrganization() || !target.IsActive || target.ProhibitLogin || !companyTeam.IsMember(ctx, target.ID) {
+		ctx.NotFound("Pretend", nil)
 		return
 	}
 
-	memberExists := false
-	selfExists := false
-	for _, member := range companyTeam.Members {
-		if member.ID == u.ID {
-			memberExists = true
-		}
-		if member.ID == ctx.Doer.ID {
-			selfExists = true
-		}
-		if memberExists && selfExists {
-			break
-		}
-	}
-
-	if !memberExists {
-		ctx.NotFound("Pretend", err)
+	if target.ID == ctx.Doer.ID {
+		ctx.RedirectToCurrentSite(ctx.FormString("redirect_to"), target.HomeLink())
 		return
 	}
 
-	handleSignInFull(ctx, u, true, false)
-	if ctx.Written() {
+	updates := map[string]any{
+		"uid":                        target.ID,
+		"uname":                      target.Name,
+		auth_service.PretendOrgIDKey: org.ID,
+	}
+	if !isPretending {
+		updates[auth_service.PretendOriginalUIDKey] = originalUser.ID
+	}
+	if err := updateSession(ctx, nil, updates); err != nil {
+		ctx.ServerError("UpdatePretendSession", err)
 		return
 	}
-	ctx.RedirectToCurrentSite(ctx.FormString("redirect_to"), u.HomeLink())
+
+	ctx.Csrf.DeleteCookie(ctx)
+	log.Info("User %s[%d] started pretending as %s[%d] in organization %s[%d]", originalUser.Name, originalUser.ID, target.Name, target.ID, org.Name, org.ID)
+	ctx.RedirectToCurrentSite(ctx.FormString("redirect_to"), target.HomeLink())
 }

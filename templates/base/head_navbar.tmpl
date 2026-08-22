@@ -82,6 +82,18 @@
 				</div><!-- end content avatar menu -->
 			</div><!-- end dropdown avatar menu -->
 		{{else if .IsSigned}}
+			{{if .IsPretending}}
+				<form method="post" action="{{AppSubUrl}}/user/pretend/{{.PretendOriginalUser.ID}}" class="item tw-m-0" data-tooltip-content="Return to {{.PretendOriginalUser.Name}}">
+					{{.CsrfTokenHtml}}
+					<input type="hidden" name="org_id" value="{{.PretendOrgID}}">
+					<input type="hidden" name="redirect_to" value="{{.CurrentURL}}">
+					<button type="submit" class="btn tw-w-full">
+						{{svg "octicon-person"}}
+						<span class="not-mobile">Return to {{.PretendOriginalUser.Name}}</span>
+					</button>
+				</form>
+			{{end}}
+
 			{{if and EnableTimetracking .ActiveStopwatch}}
 			<a class="item not-mobile active-stopwatch tw-mx-0" href="{{.ActiveStopwatch.IssueLink}}" title="{{ctx.Locale.Tr "active_stopwatch"}}" data-seconds="{{.ActiveStopwatch.Seconds}}">
 				<div class="tw-relative">
@@ -111,10 +123,15 @@
 						</div>
 						<div class="divider"></div>
 						{{range .CompanyTeam.Members}}
-							<a class="item" href="{{AppSubUrl}}/user/pretend/{{.ID}}?redirect_to={{$.CurrentURL}}&org_id={{$.Org.ID}}">
-								<span class="fitted">{{ctx.AvatarUtils.Avatar . 24 "tw-mr-1"}}</span>
-								{{.Name}}
-							</a>
+							<form method="post" action="{{AppSubUrl}}/user/pretend/{{.ID}}" class="item">
+								{{$.CsrfTokenHtml}}
+								<input type="hidden" name="org_id" value="{{$.Org.ID}}">
+								<input type="hidden" name="redirect_to" value="{{$.CurrentURL}}">
+								<button type="submit" class="btn tw-w-full">
+									<span class="fitted">{{ctx.AvatarUtils.Avatar . 24 "tw-mr-1"}}</span>
+									{{.Name}}
+								</button>
+							</form>
 						{{end}}
 					</div><!-- end content pretend menu -->
 				</div><!-- end dropdown menu pretend -->

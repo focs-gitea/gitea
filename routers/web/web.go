@@ -128,6 +128,20 @@ func webAuth(authMethod auth_service.Method) func(*context.Context) {
 		if ctx.Doer == nil {
 			// ensure the session uid is deleted
 			_ = ctx.Session.Delete("uid")
+			return
+		}
+
+		originalUser, pretendOrgID, isPretending, err := auth_service.ValidatePretendSession(ctx, ctx.Session, ctx.Doer)
+		if err != nil {
+			log.Error("Invalid pretend session for user %d: %v", ctx.Doer.ID, err)
+			auth.HandleSignOut(ctx)
+			ctx.Error(http.StatusUnauthorized, "Invalid pretend session")
+			return
+		}
+		if isPretending {
+			ctx.Data["IsPretending"] = true
+			ctx.Data["PretendOriginalUser"] = originalUser
+			ctx.Data["PretendOrgID"] = pretendOrgID
 		}
 	}
 }
@@ -672,7 +686,7 @@ func registerRoutes(m *web.Route) {
 			m.Get("/{provider}", auth.SignInOAuth)
 			m.Get("/{provider}/callback", auth.SignInOAuthCallback)
 		})
-		m.Get("/pretend/{userid}", auth.Pretend, reqSignIn)
+		m.Post("/pretend/{userid}", auth.Pretend, reqSignIn)
 	})
 	// ***** END: User *****
 
