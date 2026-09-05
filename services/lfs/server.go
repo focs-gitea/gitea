@@ -517,6 +517,9 @@ func authenticate(ctx *context.Context, repository *repo_model.Repository, autho
 			return false
 		}
 		if task.RepoID != repository.ID {
+			if accessMode <= perm.AccessModeRead && strings.EqualFold(repository.OwnerName, "actions") {
+				return true
+			}
 			return false
 		}
 

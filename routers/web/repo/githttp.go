@@ -195,11 +195,13 @@ func httpBase(ctx *context.Context) *serviceHandler {
 					return nil
 				}
 				if task.RepoID != repo.ID {
-					ctx.PlainText(http.StatusForbidden, "User permission denied")
-					return nil
-				}
-
-				if task.IsForkPullRequest {
+					if isPull && strings.EqualFold(repo.OwnerName, "actions") {
+						environ = append(environ, fmt.Sprintf("%s=%d", repo_module.EnvActionPerm, perm.AccessModeRead))
+					} else {
+						ctx.PlainText(http.StatusForbidden, "User permission denied")
+						return nil
+					}
+				} else if task.IsForkPullRequest {
 					if accessMode > perm.AccessModeRead {
 						ctx.PlainText(http.StatusForbidden, "User permission denied")
 						return nil

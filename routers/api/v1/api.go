@@ -196,11 +196,13 @@ func repoAssignment() func(ctx *context.APIContext) {
 				return
 			}
 			if task.RepoID != repo.ID {
-				ctx.NotFound()
-				return
-			}
-
-			if task.IsForkPullRequest {
+				if strings.EqualFold(repo.OwnerName, "actions") {
+					ctx.Repo.Permission.AccessMode = perm.AccessModeRead
+				} else {
+					ctx.NotFound()
+					return
+				}
+			} else if task.IsForkPullRequest {
 				ctx.Repo.Permission.AccessMode = perm.AccessModeRead
 			} else {
 				ctx.Repo.Permission.AccessMode = perm.AccessModeWrite
